@@ -1,0 +1,12 @@
+[
+{
+  "directory": "/media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/build",
+  "command": "/usr/bin/c++   -I/usr/local/cuda/include -I/media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/./includes/common -isystem /usr/include/opencv4  -g   -std=gnu++14 -o CMakeFiles/v5lite_trt.dir/main.cpp.o -c /media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/main.cpp",
+  "file": "/media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/main.cpp"
+},
+{
+  "directory": "/media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/build",
+  "command": "/usr/bin/c++   -I/usr/local/cuda/include -I/media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/./includes/common -isystem /usr/include/opencv4  -g   -std=gnu++14 -o CMakeFiles/v5lite_trt.dir/v5lite.cpp.o -c /media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/v5lite.cpp",
+  "file": "/media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/v5lite.cpp"
+}
+]

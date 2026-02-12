@@ -1,0 +1,3 @@
+/media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/build/CMakeFiles/rebuild_cache.dir
+/media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/build/CMakeFiles/edit_cache.dir
+/media/F/hbf/YOLOv5-Lite-master/cpp_demo/tensorrt/build/CMakeFiles/v5lite_trt.dir
