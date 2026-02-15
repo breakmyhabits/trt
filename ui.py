@@ -100,7 +100,7 @@ service = CPPInferenceService()
 
 def run_inference(file):
     if file is None:
-        return None, "", 0, 0, 0
+        return None, None, "", 0, 0, 0
     
     # # Gradio 传入的是 numpy array，我们需要先存为临时文件供 C++ 读取
     # temp_input = "temp_query.jpg"
@@ -139,23 +139,25 @@ def run_inference(file):
         if file_ext in ['.jpg', '.jpeg', '.png', '.bmp']:
             # 读取结果并转回 RGB 供 Gradio 显示
             res_img = cv2.imread(output_path)
-            return cv2.cvtColor(res_img, cv2.COLOR_BGR2RGB), details, prep_time, inf_time, fps
+            return cv2.cvtColor(res_img, cv2.COLOR_BGR2RGB), None, details, prep_time, inf_time, fps
         elif file_ext in ['.mp4', '.avi', '.mkv', '.mov']:
             # 对于视频，返回视频路径
-            return output_path, details, prep_time, inf_time, fps
+            return None, output_path, details, prep_time, inf_time, fps
         else:
-            return None, f"不支持的文件类型: {file_ext}", 0, 0, 0
+            return None, None, f"不支持的文件类型: {file_ext}", 0, 0, 0
     else:
-        return None, f"推理失败\n\n{output_info}", 0, 0, 0
+        return None, None, f"推理失败\n\n{output_info}", 0, 0, 0
 
 # 定义界面
 with gr.Blocks(title="C++ Backend Inference") as demo:
-    gr.Markdown("# 🚀 C++ TensorRT 后端 + Python 前端演示")
+    gr.Markdown("# 🚀 基于边缘端推理优化的农林病虫害无人机实时检测系统")
     
     with gr.Row():
         inp = gr.File(label="上传图片或视频", file_types=["image", "video"])
-        out = gr.Video(label="推理结果")
-        
+        with gr.Column():
+            img_out = gr.Image(label="推理结果")
+            vid_out = gr.Video(label="推理结果")
+    btn = gr.Button("开始推理", variant="primary")
     with gr.Row():
         details = gr.Textbox(label="推理详细信息", lines=10, interactive=False)
         
@@ -164,8 +166,8 @@ with gr.Blocks(title="C++ Backend Inference") as demo:
         inf_time = gr.Number(label="推理时间 (ms)", interactive=False)
         fps = gr.Number(label="FPS", interactive=False)
         
-    btn = gr.Button("开始推理", variant="primary")
-    btn.click(run_inference, inputs=inp, outputs=[out, details, prep_time, inf_time, fps])
+    
+    btn.click(run_inference, inputs=inp, outputs=[img_out, vid_out, details, prep_time, inf_time, fps])
 
 if __name__ == "__main__":
     try:
