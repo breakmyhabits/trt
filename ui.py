@@ -150,7 +150,36 @@ def run_inference(file):
 
 # 定义界面
 with gr.Blocks(title="C++ Backend Inference") as demo:
-    gr.Markdown("# 🚀 基于边缘端推理优化的农林病虫害无人机实时检测系统")
+    # 添加CSS样式，设置背景图
+    demo.css = """
+    .gradio-container {
+        background-image: url('tree/frame_000000.jpg');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+    .gradio-container > .block {
+        background-color: rgba(255, 255, 255, 0.8);
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px;
+    }
+    .logo {
+        flex: 0 0 100px !important;
+        max-width: 100px !important;
+        margin-right: 20px !important;
+    }
+    .title {
+        flex: 1 !important;
+    }
+    
+    """
+    
+    # 添加logo
+    with gr.Row():
+        gr.Image(value="./samples/xidian.jpg", height=100, width=100, elem_classes="logo")
+    
+        gr.Markdown("# 基于边缘端推理优化的农林病虫害无人机实时检测系统", elem_classes="title")
     
     with gr.Row():
         inp = gr.File(label="上传图片或视频", file_types=["image", "video"])
