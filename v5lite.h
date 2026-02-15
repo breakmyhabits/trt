@@ -20,10 +20,17 @@ public:
     ~V5lite();
     void LoadEngine();
     bool InferenceFolder(const std::string &folder_name);
+    std::string InferenceImage(const std::string& imagePath);
+
+    // === [新增] 单个视频推理接口 ===
+    // 返回处理后的视频路径
+    std::string InferenceVideo(const std::string& videoPath);
 
 private:
     void EngineInference(const std::vector<std::string> &image_list, const int &outSize,void **buffers,
                          const std::vector<int64_t> &bufferSize, cudaStream_t stream);
+    // void EngineInference(const std::vector<cv::Mat> &vec_Mat, const std::vector<std::string> &vec_name, const int &outSize, void **buffers,
+    //                          const std::vector<int64_t> &bufferSize, cudaStream_t stream, float total_time);
     std::vector<float> prepareImage(std::vector<cv::Mat> & vec_img);
     std::vector<std::vector<DetectRes>> postProcess(const std::vector<cv::Mat> &vec_Mat, float *output, const int &outSize);
     void NmsDetect(std::vector <DetectRes> &detections);

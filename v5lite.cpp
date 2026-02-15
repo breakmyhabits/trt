@@ -70,6 +70,7 @@ bool V5lite::InferenceFolder(const std::string &folder_name) {
 
     int outSize = bufferSize[1] / sizeof(float) / BATCH_SIZE;
 
+    
     EngineInference(sample_images, outSize, buffers, bufferSize, stream);
 
     // release the stream and the buffers
@@ -281,4 +282,218 @@ float V5lite::IOUCalculate(const V5lite::DetectRes &det_a, const V5lite::DetectR
         return 0;
     else
         return inter_area / union_area - distance_d / distance_c;
+}
+
+std::string V5lite::InferenceImage(const std::string& imagePath) {
+    //get context
+    assert(engine != nullptr);
+    context = engine->createExecutionContext();
+    assert(context != nullptr);
+ 
+    //get buffers
+    assert(engine->getNbIOTensors() == 2);
+    void *buffers[2];
+    std::vector<int64_t> bufferSize;
+    int nbBindings = engine->getNbIOTensors();
+    bufferSize.resize(nbBindings);
+ 
+    for (int i = 0; i < nbBindings; ++i) {
+        const char* tensorName = engine->getIOTensorName(i);
+        nvinfer1::Dims dims = engine->getTensorShape(tensorName);
+        nvinfer1::DataType dtype = engine->getTensorDataType(tensorName);
+        int64_t totalSize = volume(dims) * 1 * getElementSize(dtype);
+        bufferSize[i] = totalSize;
+        cudaMalloc(&buffers[i], totalSize);
+    }
+ 
+    //get stream
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+ 
+    int outSize = bufferSize[1] / sizeof(float) / BATCH_SIZE;
+ 
+    // Process single image
+    cv::Mat src_img = cv::imread(imagePath);
+    if (!src_img.data) {
+        std::cout << "Failed to read image: " << imagePath << std::endl;
+        return "";
+    }
+ 
+    std::vector<cv::Mat> vec_Mat(1, src_img);
+    std::vector<std::string> vec_name(1, imagePath);
+    int total_time = 0;
+    // Prepare image
+    auto t_start_pre = std::chrono::high_resolution_clock::now();  
+    std::vector<float> curInput = prepareImage(vec_Mat);
+    auto t_end_pre = std::chrono::high_resolution_clock::now();
+    float total_pre = std::chrono::duration<float, std::milli>(t_end_pre - t_start_pre).count();
+    std::cout << "prepare image take: " << total_pre << " ms." << std::endl; 
+    total_time += total_pre;
+    // DMA the input to the GPU
+    cudaMemcpyAsync(buffers[0], curInput.data(), bufferSize[0], cudaMemcpyHostToDevice, stream);
+ 
+    // Do inference
+    auto t_start = std::chrono::high_resolution_clock::now();      
+    context->executeV2(buffers);
+    auto t_end = std::chrono::high_resolution_clock::now();
+    float total_inf = std::chrono::duration<float, std::milli>(t_end - t_start).count();
+    std::cout << "Inference take: " << total_inf << " ms." << std::endl;
+    total_time += total_inf;
+     
+    // DMA the output back to the host
+    auto r_start = std::chrono::high_resolution_clock::now();
+    auto *out = new float[outSize * BATCH_SIZE];
+    cudaMemcpyAsync(out, buffers[1], bufferSize[1], cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
+ 
+    // Post process           
+    auto boxes = postProcess(vec_Mat, out, outSize);
+    auto r_end = std::chrono::high_resolution_clock::now();
+    float total_res = std::chrono::duration<float, std::milli>(r_end - r_start).count();
+    std::cout << "Post process take: " << total_res << " ms." << std::endl;
+    total_time += total_res; 
+    // Draw bounding boxes
+    auto org_img = vec_Mat[0];
+    auto rects = boxes[0];
+    for(const auto &rect : rects) {
+        char t[256];
+        sprintf(t, "%.2f", rect.prob);
+        std::string name = coco_labels[rect.classes] + "-" + t;
+ 
+        cv::putText(org_img, name, cv::Point(rect.x - rect.w / 2, rect.y - rect.h / 2 - 5), cv::FONT_HERSHEY_COMPLEX, 0.7, class_colors[rect.classes], 2);
+        cv::Rect rst(rect.x - rect.w / 2, rect.y - rect.h / 2, rect.w, rect.h);
+        cv::rectangle(org_img, rst, class_colors[rect.classes], 2, cv::LINE_8, 0);
+    }
+ 
+    // Save result
+    int pos = imagePath.find_last_of(".");
+    std::string tempPath = imagePath;
+    std::string rst_name = tempPath.insert(pos, "_");
+    cv::imwrite(rst_name, org_img);
+ 
+    // Cleanup
+    cudaStreamDestroy(stream);
+    cudaFree(buffers[0]);
+    cudaFree(buffers[1]);
+    delete[] out;
+    delete context;
+    std::cout << "Average processing time is " << total_time << "ms" << std::endl;
+ 
+    return rst_name;
+}
+ 
+std::string V5lite::InferenceVideo(const std::string& videoPath) {
+    //get context
+    assert(engine != nullptr);
+    context = engine->createExecutionContext();
+    assert(context != nullptr);
+ 
+    // Open video file
+    cv::VideoCapture cap(videoPath);
+    if (!cap.isOpened()) {
+        std::cout << "Failed to open video: " << videoPath << std::endl;
+        return "";
+    }
+ 
+    // Get video properties
+    int frame_width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+    int frame_height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+    int fps = static_cast<int>(cap.get(cv::CAP_PROP_FPS));
+ 
+    // Create output video
+    int pos = videoPath.find_last_of(".");
+    std::string tempPath = videoPath;
+    std::string rst_name = tempPath.insert(pos, "_");
+    cv::VideoWriter out_video(rst_name, cv::VideoWriter::fourcc('M','J','P','G'), fps, cv::Size(frame_width, frame_height));
+ 
+    //get buffers
+    assert(engine->getNbIOTensors() == 2);
+    void *buffers[2];
+    std::vector<int64_t> bufferSize;
+    int nbBindings = engine->getNbIOTensors();
+    bufferSize.resize(nbBindings);
+ 
+    for (int i = 0; i < nbBindings; ++i) {
+        const char* tensorName = engine->getIOTensorName(i);
+        nvinfer1::Dims dims = engine->getTensorShape(tensorName);
+        nvinfer1::DataType dtype = engine->getTensorDataType(tensorName);
+        int64_t totalSize = volume(dims) * 1 * getElementSize(dtype);
+        bufferSize[i] = totalSize;
+        cudaMalloc(&buffers[i], totalSize);
+    }
+ 
+    //get stream
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+ 
+    int outSize = bufferSize[1] / sizeof(float) / BATCH_SIZE;
+ 
+    // Process video frames
+    float total_time = 0.0;
+    cv::Mat frame;
+    while (cap.read(frame)) {
+        std::vector<cv::Mat> vec_Mat(1, frame);
+ 
+        // Prepare image
+        auto t_start_pre = std::chrono::high_resolution_clock::now();
+        std::vector<float> curInput = prepareImage(vec_Mat);
+        auto t_end_pre = std::chrono::high_resolution_clock::now();
+        float total_pre = std::chrono::duration<float, std::milli>(t_end_pre - t_start_pre).count();
+        std::cout << "prepare image take: " << total_pre << " ms." << std::endl; 
+        total_time += total_pre;
+ 
+        // DMA the input to the GPU
+        cudaMemcpyAsync(buffers[0], curInput.data(), bufferSize[0], cudaMemcpyHostToDevice, stream);
+ 
+        // Do inference
+        auto t_start_inf = std::chrono::high_resolution_clock::now();
+        context->executeV2(buffers);
+        auto t_end_inf = std::chrono::high_resolution_clock::now();
+        float total_inf = std::chrono::duration<float, std::milli>(t_end_inf - t_start_inf).count();
+        std::cout << "Inference take: " << total_inf << " ms." << std::endl;
+        total_time += total_inf;
+ 
+        // DMA the output back to the host
+        auto t_start_res = std::chrono::high_resolution_clock::now();
+        auto *out = new float[outSize * BATCH_SIZE];
+        cudaMemcpyAsync(out, buffers[1], bufferSize[1], cudaMemcpyDeviceToHost, stream);
+        cudaStreamSynchronize(stream);
+ 
+        // Post process
+        auto boxes = postProcess(vec_Mat, out, outSize);
+        auto t_end_res = std::chrono::high_resolution_clock::now();
+        float total_res = std::chrono::duration<float, std::milli>(t_end_res - t_start_res).count();
+        std::cout << "Post process take: " << total_res << " ms." << std::endl;
+        total_time += total_res;
+ 
+        // Draw bounding boxes
+        auto org_img = vec_Mat[0];
+        auto rects = boxes[0];
+        for(const auto &rect : rects) {
+            char t[256];
+            sprintf(t, "%.2f", rect.prob);
+            std::string name = coco_labels[rect.classes] + "-" + t;
+ 
+            cv::putText(org_img, name, cv::Point(rect.x - rect.w / 2, rect.y - rect.h / 2 - 5), cv::FONT_HERSHEY_COMPLEX, 0.7, class_colors[rect.classes], 2);
+            cv::Rect rst(rect.x - rect.w / 2, rect.y - rect.h / 2, rect.w, rect.h);
+            cv::rectangle(org_img, rst, class_colors[rect.classes], 2, cv::LINE_8, 0);
+        }
+ 
+        // Write frame to output video
+        out_video.write(org_img);
+        
+ 
+        // Cleanup
+        delete[] out;
+    }
+ 
+    // Release resources
+    std::cout << "Total time for this frame: " << total_time / fps << " ms." << std::endl;
+    cap.release();
+    out_video.release();
+    cudaStreamDestroy(stream);
+    cudaFree(buffers[0]);
+    cudaFree(buffers[1]);
+ 
+    return rst_name;
 }
